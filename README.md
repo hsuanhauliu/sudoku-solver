@@ -32,5 +32,11 @@ Follow the commands below to run the program.
 python sudoku_solver.py
 ```
 
+## Todo
+- Change file format to CSV.
+- Update it to Python 3.
+- Restructure the code.
+- Convert it to CLI.
+
 ### Screenshot:
 ![screenshot](imgs/screenshot.jpg "screenshot")
