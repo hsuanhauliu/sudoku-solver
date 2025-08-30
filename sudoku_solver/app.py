@@ -1,4 +1,5 @@
 import os
+import argparse
 
 class SudokuSolver(object):
     
@@ -9,24 +10,24 @@ class SudokuSolver(object):
     # Load the game from text file
     def load_game(self, filename):
         if os.path.isfile(filename):
-            rFile = open(filename, "r")
-            lines = rFile.readlines()
+            with open(filename, "r") as rFile:
+                lines = rFile.readlines()
 
-            r, c = 9, 9
-            self.board = [[0 for x in range(c)] for y in range(r)]
-            row = 0
-            col = 0
-     
-            for l in lines:
-                currLine = l.split(" ")
-                for num in currLine:
-                    self.board[row][col] = int(num)
-                    col += 1
+                r, c = 9, 9
+                self.board = [[0 for x in range(c)] for y in range(r)]
+                row = 0
                 col = 0
-                row += 1
-            rFile.close()
+        
+                for l in lines:
+                    currLine = l.split(" ")
+                    for num in currLine:
+                        self.board[row][col] = int(num)
+                        col += 1
+                    col = 0
+                    row += 1
         else:
-            print "Can't find the file."
+            print(f"Error: Can't find the file '{filename}'.")
+            exit(1) # Exit if the file doesn't exist
 
         return
 
@@ -35,14 +36,14 @@ class SudokuSolver(object):
         for row in range(9):
             for col in range(9):
                 if self.board[row][col] == 0:
-                    print '_',
+                    print('_', end=' ')
                 else:
-                    print self.board[row][col],
+                    print(self.board[row][col], end=' ')
                 if col == 2 or col == 5:
-                    print '|',
-            print '\n',
+                    print('|', end=' ')
+            print()
             if row == 2 or row == 5:
-                print '---------------------'
+                print('---------------------')
 
         return
 
@@ -64,9 +65,9 @@ class SudokuSolver(object):
             we have already checked and affected by our move.
         """
         # Go through rows
-        for row in xrange(9):
+        for row in range(9):
             # Go through column
-            for col in xrange(9):
+            for col in range(9):
                 if self.board[row][col] == 0:    # if the block is empty
                     valid_moves = self.calculate_moves((row, col))    # get all valid moves
                     
@@ -93,17 +94,22 @@ class SudokuSolver(object):
         """
 
         # Go through each blank cell
-        for key_1 in self.possible_moves.keys():
+        # Iterate over a copy of the keys to allow deletion within the loop
+        for key_1 in list(self.possible_moves.keys()):
             # A cell is 0 if it has been checked
-            if self.possible_moves[key_1][0] != 0:
+            if key_1 in self.possible_moves and self.possible_moves[key_1][0] != 0:
                 # Check rows first
                 union_set = []
                 for key_2 in self.possible_moves.keys():
                     if key_1[0] == key_2[0]:
                         if key_2 != key_1:
                             union_set.append(set(self.possible_moves[key_2]))
+                
+                if union_set:
+                    check = list(set(self.possible_moves[key_1]) - set.union(*union_set))
+                else:
+                    check = self.possible_moves[key_1]
 
-                check = list(set(self.possible_moves[key_1]) - set.union(*union_set))
 
                 if len(check) == 1 and check[0] != 0:
                     move = check[0]
@@ -118,8 +124,12 @@ class SudokuSolver(object):
                     if key_1[1] == key_2[1]:
                         if key_2 != key_1:
                             union_set2.append(set(self.possible_moves[key_2]))
+                
+                if union_set2:
+                    check2 = list(set(self.possible_moves[key_1]) - set.union(*union_set2))
+                else:
+                    check2 = self.possible_moves[key_1]
 
-                check2 = list(set(self.possible_moves[key_1]) - set.union(*union_set2))
 
                 if len(check2) == 1 and check2[0] != 0:
                     move = check2[0]
@@ -130,16 +140,19 @@ class SudokuSolver(object):
 
                 # Check block
                 union_set3 = []
-                block_row = key_1[0] / 3
-                block_col = key_1[1] / 3
+                block_row = key_1[0] // 3
+                block_col = key_1[1] // 3
                 for key_2 in self.possible_moves.keys():
                     if key_2 != key_1:
-                        br = key_2[0] / 3
-                        bc = key_2[1] / 3
+                        br = key_2[0] // 3
+                        bc = key_2[1] // 3
                         if block_row == br and block_col == bc:
                             union_set3.append(set(self.possible_moves[key_2]))
 
-                check3 = list(set(self.possible_moves[key_1]) - set.union(*union_set3))
+                if union_set3:
+                    check3 = list(set(self.possible_moves[key_1]) - set.union(*union_set3))
+                else:
+                    check3 = self.possible_moves[key_1]
 
                 if len(check3) == 1 and check3[0] != 0:
                     move = check3[0]
@@ -156,8 +169,8 @@ class SudokuSolver(object):
         """
         blank_cells = [] # a list of blank cells
 
-        for r in xrange(9):
-            for c in xrange(9):
+        for r in range(9):
+            for c in range(9):
                 if self.board[r][c] == 0:
                     blank_cells.append((r, c))
         self.solve_next(blank_cells)
@@ -169,7 +182,7 @@ class SudokuSolver(object):
             Recurrence method for solving each cell.
         """
         # return true when we reach the leave node
-        if blank_cells == []:
+        if not blank_cells:
             return True
 
         cell = blank_cells.pop() # get next cell
@@ -187,46 +200,44 @@ class SudokuSolver(object):
         blank_cells.append(cell)
         return False
 
-    def check_board(self, (row, col)):
+    def check_board(self, position):
         """
             Check if the move is valid by finding duplicates in row, column, and section.
         """
+        row, col = position
         checklist = []
 
         # check row
-        for c in xrange(9):
+        for c in range(9):
             number = self.board[row][c]
             if number != 0:
                 if number in checklist:
-                    #print "duplicate in row"
                     return False
                 else:
                     checklist.append(number)
 
-        del checklist[:] # clear list
+        checklist.clear()
 
         # check column
-        for r in xrange(9):
+        for r in range(9):
             number = self.board[r][col]
             if number != 0:
                 if number in checklist:
-                    #print "duplicate in column"
                     return False
                 else:
                     checklist.append(number)
             
-        del checklist[:] # clear list
+        checklist.clear()
 
         # check section
-        temp_r = row / 3 * 3
-        section_c = col / 3 * 3
-        for r in xrange(3):
+        temp_r = (row // 3) * 3
+        section_c = (col // 3) * 3
+        for r in range(3):
             section_r = temp_r + r
-            for c in xrange(3):
+            for c in range(3):
                 number = self.board[section_r][section_c + c]
                 if number != 0:
                     if number in checklist:
-                        #print "duplicate in section"
                         return False
                     else:
                         checklist.append(number)
@@ -238,7 +249,8 @@ class SudokuSolver(object):
         """
             Delete cells that have already been solved.
         """
-        for key in self.possible_moves.keys():
+        # Iterate over a copy of the keys to allow deletion within the loop
+        for key in list(self.possible_moves.keys()):
             if self.possible_moves[key][0] == 0:
                 del self.possible_moves[key]
         return
@@ -248,16 +260,16 @@ class SudokuSolver(object):
             Update the neighboring blank cells that have been affected by the move.
         """
         # find which section we're in
-        cell_row = position[0] / 3
-        cell_col = position[1] / 3
+        cell_row = position[0] // 3
+        cell_col = position[1] // 3
  
-        for key, value in self.possible_moves.iteritems():
+        for key, value in self.possible_moves.items():
             # if it's on the same row, column, or section
-            if key[0] == position[0] or key[1] == position[1] or (key[0] / 3 == cell_row and key[1] / 3 == cell_col):
+            if key[0] == position[0] or key[1] == position[1] or (key[0] // 3 == cell_row and key[1] // 3 == cell_col):
                 # if the move affect this current cell
                 if move in value:
                     value.remove(move)
-                    if len(value) == 1 and value != 0:
+                    if len(value) == 1 and value[0] != 0:
                         new_move = value[0]
                         self.board[key[0]][key[1]] = new_move
                         value[0] = 0
@@ -273,13 +285,13 @@ class SudokuSolver(object):
         valid_moves = [1, 2, 3, 4, 5, 6, 7, 8, 9] # return variable
 
         # check row
-        for c in xrange(9):
+        for c in range(9):
             current = self.board[position[0]][c]
             if current != 0:
                 invalid_moves.append(current)
 
         # check col
-        for r in xrange(9):
+        for r in range(9):
             current = self.board[r][position[1]]
             if current != 0 and current not in invalid_moves:
                 invalid_moves.append(current)
@@ -287,9 +299,9 @@ class SudokuSolver(object):
         # check block
         start_row = position[0] - position[0] % 3
         start_col = position[1] - position[1] % 3
-        for r in xrange(3):
+        for r in range(3):
             curr_row = start_row + r
-            for c in xrange(3):
+            for c in range(3):
                 curr_col = start_col + c
                 current = self.board[curr_row][curr_col]
                 if current != 0 and current not in invalid_moves:
@@ -297,7 +309,8 @@ class SudokuSolver(object):
 
         # remove invalid_moves
         for n in invalid_moves:
-            valid_moves.remove(n)
+            if n in valid_moves:
+                valid_moves.remove(n)
 
         return valid_moves
 
@@ -313,26 +326,38 @@ class SudokuSolver(object):
         return num_of_blanks
 
 def main():
-    input_file = raw_input("Enter file name: ")
+    # Set up command-line argument parsing
+    parser = argparse.ArgumentParser(description="A command-line Sudoku solver.")
+    parser.add_argument('--file', required=True, help='Path to the Sudoku puzzle file.')
+    args = parser.parse_args()
+    
+    # Use the file from the command-line argument
+    input_file = args.file
+    
     ss = SudokuSolver()
     ss.load_game(input_file)
-    print "\n== Initialize Board =="
+    
+    print("\n== Initial Board ==")
     ss.display_board()
+    
     number_of_blanks = ss.count_blank()
-    print "\nThere are", number_of_blanks, "blanks."
-    temp = raw_input("\nPress enter to solve...")
+    print(f"\nThere are {number_of_blanks} blank cells to solve.")
 
     # solving algorithm
+    print("\nSolving...")
     ss.solve()
 
     # display the result
-    print "\n=== Current Board ==="
+    print("\n=== Solved Board ===")
     ss.display_board()
 
-    print "\nYayyyy I solved it!!! I'm the best ;D\n"
+    if ss.count_blank() == 0:
+        print("\nYayyyy! The puzzle is solved! ;D\n")
+    else:
+        print("\nCould not solve the puzzle completely.\n")
+
 
     return
 
 if __name__ == '__main__':
-    import sys
     main()

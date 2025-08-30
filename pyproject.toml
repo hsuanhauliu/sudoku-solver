@@ -1,0 +1,21 @@
+[project]
+name = "sudoku-solver"
+version = "0.1.0"
+description = ""
+authors = [
+    {name = "Howard Liu",email = "23202168+hsuanhauliu@users.noreply.github.com"}
+]
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+]
+
+[tool.poetry]
+packages = [{include = "sudoku_solver", from = "."}]
+
+[tool.poetry.scripts]
+sudoku-solver = "sudoku_solver.app:main"
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
