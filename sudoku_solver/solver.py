@@ -5,7 +5,7 @@ class SudokuSolver():
         self.board = []
         self.possible_moves = {}
 
-    # Load the game from text file
+    # Load the puzzle from text file
     def load_csv(self, filename):
         if os.path.isfile(filename):
             with open(filename, "r") as rFile:
@@ -27,6 +27,9 @@ class SudokuSolver():
             print(f"Error: Can't find the file '{filename}'.")
             exit(1) # Exit if the file doesn't exist
         return
+
+    def load_board(self, board):
+        self.board = board
 
     # Display current board
     def display_board(self):

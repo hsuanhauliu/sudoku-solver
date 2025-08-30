@@ -6,9 +6,12 @@ authors = [
     {name = "Howard Liu",email = "23202168+hsuanhauliu@users.noreply.github.com"}
 ]
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.9,<3.13"
 dependencies = [
 ]
+
+[project.optional-dependencies]
+cv = ["pytesseract (>=0.3.13,<0.4.0)", "opencv-python (>=4.12.0.88,<5.0.0.0)"]
 
 [tool.poetry]
 packages = [{include = "sudoku_solver", from = "."}]

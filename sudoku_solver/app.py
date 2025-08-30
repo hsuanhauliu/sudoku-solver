@@ -5,26 +5,36 @@ def main():
     # Set up command-line argument parsing
     parser = argparse.ArgumentParser(description="A command-line Sudoku solver.")
     parser.add_argument('--file', required=True, help='Path to the Sudoku puzzle file.')
+    parser.add_argument("-v", "--verbose", default=False, help="Enable verbose output.")
     args = parser.parse_args()
-    
-    ss = SudokuSolver()
-    ss.load_csv(args.file)
+
+    solver = SudokuSolver()
+    if (args.file.endswith('.csv')):
+        solver.load_csv(args.file)
+    else:
+        # attempt to load it as image
+        from .image_process import extract_sudoku_board
+        extracted_board = extract_sudoku_board(args.file)
+        if extracted_board is None:
+            print("Failed to extract Sudoku board from image")
+            return # Tesseract error occurred
+        solver.load_board(extracted_board)
     
     print("\n==== Input Board ====")
-    ss.display_board()
+    solver.display_board()
     
-    number_of_blanks = ss.get_empty_cell_count()
+    number_of_blanks = solver.get_empty_cell_count()
     print(f"\nThere are {number_of_blanks} empty cells.")
 
-    ss.solve()
+    solver.solve()
 
     # display the result
     print("\n=== Complete Board ==")
-    ss.display_board()
+    solver.display_board()
 
-    # in case the board is invalid or impossible to solve
-    if ss.get_empty_cell_count() != 0:
-        print("\nCould not solve the puzzle completely.\n")
+    # in case the board is invalid or imposolverible to solve
+    if solver.get_empty_cell_count() != 0:
+        print("\nCould not solve the puzzle completely. The input could be invalid.\n")
 
     return
 
