@@ -14,7 +14,7 @@ def main():
     ss.display_board()
     
     number_of_blanks = ss.get_empty_cell_count()
-    print(f"\nThere are {number_of_blanks} blank cells to solve.")
+    print(f"\nThere are {number_of_blanks} empty cells.")
 
     ss.solve()
 

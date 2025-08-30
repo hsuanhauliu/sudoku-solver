@@ -7,20 +7,17 @@ A simple script that solves Sudoku.
 ```bash
 git clone https://github.com/hsuanhauliu/sudoku-solver.git
 cd sudoku-solver
+poetry install
 ```
 
 ## Usage
 
-Create a text file (.txt) that contains the game you want to solve with the following format:
+Create a CSV file that contains the Sudoku board. Use 0 to indicate empty cells. The puzzle must be solvable.
 
-- Enter the numbers row by row and separate each number with a space.
-- Use 0 to indicate empty cells.
-- The game must be solvable.
-
- See [samples](samples/) for examples.
+See [samples](samples/) for examples.
 
 ```bash
-python sudoku_solver.py
+poetry run sudoku-solver --file <input_file_name>
 ```
 
 ### Screenshot
