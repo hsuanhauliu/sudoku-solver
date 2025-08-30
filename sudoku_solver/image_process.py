@@ -111,32 +111,54 @@ def extract_digits_from_grid(warped_grid):
             # Crop the cell from the warped grid
             y1, y2 = r * cell_height, (r + 1) * cell_height
             x1, x2 = c * cell_width, (c + 1) * cell_width
-            cell = gray_warped[y1:y2, x1:x2]
+            
+            # Create a margin to remove grid lines from the cell
+            margin = 5
+            cell_roi = gray_warped[y1 + margin:y2 - margin, x1 + margin:x2 - margin]
+
+            # If the cell ROI is too small after margin, skip it
+            if cell_roi.shape[0] < 10 or cell_roi.shape[1] < 10:
+                continue
             
             # Apply thresholding to isolate the digit
-            _, cell_thresh = cv2.threshold(cell, 0, 255, cv2.THRESH_BINARY_INV | cv2.THRESH_OTSU)
+            _, cell_thresh = cv2.threshold(cell_roi, 0, 255, cv2.THRESH_BINARY_INV | cv2.THRESH_OTSU)
 
-            # Add padding to improve OCR accuracy
-            border_size = 10
-            cell_padded = cv2.copyMakeBorder(cell_thresh, border_size, border_size, border_size, border_size, cv2.BORDER_CONSTANT, value=0)
+            # Find contours in the thresholded cell
+            contours, _ = cv2.findContours(cell_thresh.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
-            # Check if the cell is likely to contain a digit
-            if cv2.countNonZero(cell_padded) > (cell_padded.size * 0.03):
-                # Use Tesseract to recognize the digit
-                pytesseract.pytesseract.tesseract_cmd = r'/opt/local/bin/tesseract'
-                custom_config = r'--oem 3 --psm 10 -c tessedit_char_whitelist=123456789'
-                try:
-                    digit_str = pytesseract.image_to_string(cell_padded, config=custom_config).strip()
-                    if digit_str.isdigit():
-                        board[r, c] = int(digit_str)
-                except pytesseract.TesseractNotFoundError:
-                    print("Tesseract Error: The Tesseract executable was not found.")
-                    print("Please make sure it's installed and configured correctly in the script.")
-                    return None
-                except Exception as e:
-                    # Ignore other potential OCR errors for empty cells
-                    print(e)
-                    pass
+            if contours:
+                # Find the largest contour, assuming it's the digit
+                largest_contour = max(contours, key=cv2.contourArea)
+                
+                # Filter out small noise contours
+                contour_area = cv2.contourArea(largest_contour)
+                min_area = 20 # Adjust this threshold based on image resolution
+                
+                if contour_area > min_area:
+                    # Create a mask for the largest contour to isolate the digit
+                    mask = np.zeros(cell_thresh.shape, dtype=np.uint8)
+                    cv2.drawContours(mask, [largest_contour], -1, 255, -1)
+                    
+                    # Extract the digit using the mask
+                    digit_only = cv2.bitwise_and(cell_thresh, cell_thresh, mask=mask)
+
+                    # Add padding to improve OCR accuracy
+                    border_size = 10
+                    cell_padded = cv2.copyMakeBorder(digit_only, border_size, border_size, border_size, border_size, cv2.BORDER_CONSTANT, value=0)
+
+                    # Use Tesseract to recognize the digit
+                    custom_config = r'--oem 3 --psm 10 -c tessedit_char_whitelist=123456789'
+                    try:
+                        digit_str = pytesseract.image_to_string(cell_padded, config=custom_config).strip()
+                        if digit_str.isdigit():
+                            board[r, c] = int(digit_str)
+                    except pytesseract.TesseractNotFoundError:
+                        print("Tesseract Error: The Tesseract executable was not found.")
+                        print("Please make sure it's installed and configured correctly in the script.")
+                        return None
+                    except Exception:
+                        # Ignore other potential OCR errors for empty cells
+                        pass
     return board
 
 def _debug_show_img(img):

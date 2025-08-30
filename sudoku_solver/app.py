@@ -25,6 +25,9 @@ def main():
     
     number_of_blanks = solver.get_empty_cell_count()
     print(f"\nThere are {number_of_blanks} empty cells.")
+    if number_of_blanks == 9*9:
+        print("Empty Sudoku board cannot be solved!")
+        return
 
     solver.solve()
 
