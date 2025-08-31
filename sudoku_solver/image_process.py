@@ -1,27 +1,56 @@
+import os
+import urllib.request
+
 import cv2
 import numpy as np
 import pytesseract
 
+def download_model(model_file="mnist.onnx"):
+    """Downloads the pre-trained ONNX model if it doesn't exist."""
+    if not os.path.exists(model_file):
+        print("Downloading pre-trained digit recognition model (mnist.onnx)...")
+        # A reliable link to a simple MNIST ONNX model
+        url = "https://github.com/onnx/models/raw/refs/heads/main/validated/vision/classification/mnist/model/mnist-12.onnx"
+        try:
+            urllib.request.urlretrieve(url, model_file)
+            print(f"Model download complete: {model_file}")
+        except Exception as e:
+            print(f"Error downloading model: {e}")
+            return None
+    return model_file
 
-def extract_sudoku_board(image_path):
+def extract_sudoku_board(image_path, model_path, debug=False):
+    try:
+        net = cv2.dnn.readNetFromONNX(model_path)
+    except Exception as e:
+        print(f"Error loading the ONNX model: {e}")
+        return None
+
     # 1. Preprocess the image
     original_img, thresh = preprocess_image(image_path)
     if original_img is None:
-        return
+        return None
+    if debug:
+        _debug_show_img(original_img, "original img")
+        _debug_show_img(thresh, "gray scaled")
 
     # 2. Find the Sudoku grid
     grid_contour = find_grid_contour(thresh)
     if grid_contour is None:
         print("Could not find a Sudoku grid in the image.")
-        return
+        return None
     
     cv2.drawContours(original_img, [grid_contour], -1, (0, 255, 0), 2)
+    if debug:
+        _debug_show_img(original_img, "with contour")
 
     # 3. Apply perspective transform
     warped_grid, _ = get_perspective_transform(original_img, grid_contour)
+    if debug:
+        _debug_show_img(warped_grid, "warped grid")
 
     # 4. Extract digits
-    return extract_digits_from_grid(warped_grid)
+    return extract_digits_from_grid(warped_grid, net, debug=debug)
  
 
 def preprocess_image(image_path):
@@ -38,10 +67,13 @@ def preprocess_image(image_path):
     scale = 600 / img.shape[1]
     img = cv2.resize(img, (int(img.shape[1] * scale), int(img.shape[0] * scale)))
 
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    blurred = cv2.GaussianBlur(gray, (5, 5), 3)
-    thresh = cv2.adaptiveThreshold(blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 11, 2)
-    return img, thresh
+    blurred_color = cv2.bilateralFilter(img, 9, 75, 75)
+    gray = cv2.cvtColor(blurred_color, cv2.COLOR_BGR2GRAY)
+
+    # Adaptive gaussian thresholing seems to work better for our case, since the board is usually clean.
+    # https://docs.opencv.org/3.4/d7/d4d/tutorial_py_thresholding.html
+    thresh = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 11, 2)
+    return blurred_color, thresh
 
 def find_grid_contour(thresh_image):
     """Finds the largest contour that is likely the Sudoku grid."""
@@ -98,70 +130,57 @@ def get_perspective_transform(image, corners):
     warped = cv2.warpPerspective(image, matrix, (max_width, max_height))
     return warped, matrix
 
-def extract_digits_from_grid(warped_grid):
-    """Extracts each digit from the grid cells using Tesseract OCR."""
+def extract_digits_from_grid(warped_grid, model, debug=False):
+    """Extracts each digit from the grid cells using a CNN model."""
     board = np.zeros((9, 9), dtype=int)
-    gray_warped = cv2.cvtColor(warped_grid, cv2.COLOR_BGR2GRAY)
     
-    cell_height = gray_warped.shape[0] // 9
-    cell_width = gray_warped.shape[1] // 9
+    # Resize the grid to a fixed size for consistent processing
+    fixed_size = 450
+    grid_resized = cv2.resize(warped_grid, (fixed_size, fixed_size))
+    gray_resized = cv2.cvtColor(grid_resized, cv2.COLOR_BGR2GRAY)
+    
+    cell_size = fixed_size // 9
+    margin = 5 # Number of pixels to crop from each side of the cell
 
     for r in range(9):
         for c in range(9):
-            # Crop the cell from the warped grid
-            y1, y2 = r * cell_height, (r + 1) * cell_height
-            x1, x2 = c * cell_width, (c + 1) * cell_width
-            
-            # Create a margin to remove grid lines from the cell
-            margin = 5
-            cell_roi = gray_warped[y1 + margin:y2 - margin, x1 + margin:x2 - margin]
+            # Crop the cell from the grid, removing the border via the margin.
+            y1 = r * cell_size + margin
+            y2 = (r + 1) * cell_size - margin
+            x1 = c * cell_size + margin
+            x2 = (c + 1) * cell_size - margin
+            cell_cropped = gray_resized[y1:y2, x1:x2]
 
-            # If the cell ROI is too small after margin, skip it
-            if cell_roi.shape[0] < 10 or cell_roi.shape[1] < 10:
-                continue
-            
-            # Apply thresholding to isolate the digit
-            _, cell_thresh = cv2.threshold(cell_roi, 0, 255, cv2.THRESH_BINARY_INV | cv2.THRESH_OTSU)
+            # Apply thresholding to get a binary image of the digit.
+            _, cell_thresh = cv2.threshold(cell_cropped, 0, 255, cv2.THRESH_BINARY_INV | cv2.THRESH_OTSU)
 
-            # Find contours in the thresholded cell
-            contours, _ = cv2.findContours(cell_thresh.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
-            if contours:
-                # Find the largest contour, assuming it's the digit
-                largest_contour = max(contours, key=cv2.contourArea)
+            # Check if the cell contains a digit by looking for non-zero pixels
+            if cv2.countNonZero(cell_thresh) > 20:
                 
-                # Filter out small noise contours
-                contour_area = cv2.contourArea(largest_contour)
-                min_area = 20 # Adjust this threshold based on image resolution
+                # Prepare the cell for the deep learning model
+                # The model expects a 28x28 image
+                roi = cv2.resize(cell_thresh, (28, 28))
                 
-                if contour_area > min_area:
-                    # Create a mask for the largest contour to isolate the digit
-                    mask = np.zeros(cell_thresh.shape, dtype=np.uint8)
-                    cv2.drawContours(mask, [largest_contour], -1, 255, -1)
-                    
-                    # Extract the digit using the mask
-                    digit_only = cv2.bitwise_and(cell_thresh, cell_thresh, mask=mask)
-
-                    # Add padding to improve OCR accuracy
-                    border_size = 10
-                    cell_padded = cv2.copyMakeBorder(digit_only, border_size, border_size, border_size, border_size, cv2.BORDER_CONSTANT, value=0)
-
-                    # Use Tesseract to recognize the digit
-                    custom_config = r'--oem 3 --psm 10 -c tessedit_char_whitelist=123456789'
-                    try:
-                        digit_str = pytesseract.image_to_string(cell_padded, config=custom_config).strip()
-                        if digit_str.isdigit():
-                            board[r, c] = int(digit_str)
-                    except pytesseract.TesseractNotFoundError:
-                        print("Tesseract Error: The Tesseract executable was not found.")
-                        print("Please make sure it's installed and configured correctly in the script.")
-                        return None
-                    except Exception:
-                        # Ignore other potential OCR errors for empty cells
-                        pass
+                # Create a blob for the DNN model
+                # Normalization (1/255.0) and creating the blob
+                blob = cv2.dnn.blobFromImage(roi, 1.0 / 255.0, (28, 28))
+                
+                # Set the input to the network and perform a forward pass
+                model.setInput(blob)
+                pred = model.forward()
+                
+                # Get the digit with the highest probability
+                digit = np.argmax(pred)
+                if debug:
+                    print(digit)
+                    _debug_show_img(cell_cropped)
+                
+                # Sudoku doesn't use '0', so we can ignore it to filter out noise.
+                if digit != 0:
+                    board[r, c] = digit
     return board
 
-def _debug_show_img(img):
-    cv2.imshow("debug", img)
+def _debug_show_img(img, window_name="debug"):
+    cv2.imshow(window_name, img)
     cv2.waitKey(0)
     cv2.destroyAllWindows()

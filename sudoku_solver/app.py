@@ -1,11 +1,14 @@
 import argparse
+import os
+
 from .solver import SudokuSolver
 
 def main():
-    # Set up command-line argument parsing
     parser = argparse.ArgumentParser(description="A command-line Sudoku solver.")
     parser.add_argument('--file', required=True, help='Path to the Sudoku puzzle file.')
     parser.add_argument("-v", "--verbose", default=False, help="Enable verbose output.")
+    parser.add_argument("--debug", action="store_true", help="Enable debug mode.")
+    parser.add_argument("-m", "--model", default="mnist.onnx", help="Path to the ONNX model file.")
     args = parser.parse_args()
 
     solver = SudokuSolver()
@@ -13,11 +16,17 @@ def main():
         solver.load_csv(args.file)
     else:
         # attempt to load it as image
-        from .image_process import extract_sudoku_board
-        extracted_board = extract_sudoku_board(args.file)
+        from . import image_process
+        # Download and load the deep learning model
+        model_path = image_process.download_model(args.model)
+        if model_path is None:
+            print("Could not download or find the model. Exiting.")
+            return
+
+        extracted_board = image_process.extract_sudoku_board(args.file, model_path, args.debug)
         if extracted_board is None:
             print("Failed to extract Sudoku board from image")
-            return # Tesseract error occurred
+            return
         solver.load_board(extracted_board)
     
     print("\n==== Input Board ====")

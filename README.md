@@ -14,7 +14,8 @@ To use the image recognition feature, Tesseract needs to be installed.
 
 Make sure the tesseract binary is in your path, then download the trained [data file](https://github.com/tesseract-ocr/tessdata_fast/raw/main/eng.traineddata) and place it in /opt/local/share/tessdata/eng.traineddata (for MacOS).
 
-Install optional dependencies for Image Processing capability
+Install optional dependencies for experimental image processing capability.
+
 ```bash
 poetry install -E cv
 ```
